@@ -1834,6 +1834,11 @@ if __name__ == '__main__':
         category=MathTextWarning,
         message='Substituting with a symbol from Computer Modern.'
     )
+    warnings.filterwarnings(
+        'ignore',
+        category=UserWarning,
+        message=r"'[\w\.]+' can not be subsetted into a Type 3 font."
+    )
 
     choices = list(plot_functions)
 
@@ -1845,10 +1850,26 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='generate plots')
     parser.add_argument(
+        '--paper', action='store_true',
+        help='use paper style: cm serif font, true black text + axes'
+    )
+    parser.add_argument(
         'plots', nargs='*', type=arg_to_plot, metavar='PLOT',
         help='{} (default: all)'.format(', '.join(choices).join('{}'))
     )
     args = parser.parse_args()
+
+    if args.paper:
+        plt.rcParams.update({
+            'font.family': 'serif',
+            'font.serif': ['CMU Serif'],
+            'mathtext.fontset': 'cm',
+            'text.color': 'black',
+            'axes.edgecolor': 'black',
+            'axes.labelcolor': 'black',
+            'xtick.color': 'black',
+            'ytick.color': 'black',
+        })
 
     if args.plots:
         for p in args.plots:
