@@ -256,6 +256,35 @@ def obs_color(obs, subobs):
     return hsluv.hsluv_to_rgb(obs_color_hsluv(obs, subobs))
 
 
+def obs_label(obs, subobs, differentials=False, full_cumulants=False):
+    """
+    Return a formatted label for the given observable.
+
+    """
+    if obs.startswith('d') and obs.endswith('_deta'):
+        return (r'$d{}/d\eta$' if differentials else '${}$').format(
+            {'Nch': r'N_\mathrm{ch}', 'ET': r'E_T'}[obs[1:-5]])
+
+    id_parts_labels = {
+        'dN_dy': '$dN_{}/dy$' if differentials else '$N_{}$',
+        'mean_pT': r'$\langle p_T^{} \rangle$'
+    }
+    if obs in id_parts_labels:
+        return id_parts_labels[obs].format(
+            {'pion': '\pi', 'kaon': 'K', 'proton': 'p'}[subobs]
+        )
+
+    if obs == 'pT_fluct':
+        return r'$\delta p_T/\langle p_T \rangle$'
+
+    if obs == 'vnk':
+        n, k = subobs
+        return '$v_{}{}$'.format(
+            n,
+            (r'\{' + str(k) + r'\}') if full_cumulants else ''
+        )
+
+
 def _observables_plots():
     """
     Metadata for observables plots.
@@ -1462,6 +1491,88 @@ def pca():
 
 
 @plot
+def pca_vectors_variance(system='PbPb2760'):
+    """
+    PCA vectors and explained variance.
+
+    """
+    fig, axes = plt.subplots(
+        figsize=figsize(1.2, aspect=.4),
+        ncols=2, gridspec_kw=dict(width_ratios=[5, 1])
+    )
+
+    emu = emulators[system]
+    pca = emu.pca
+
+    ax = axes[0]
+
+    for n, (pc, var) in enumerate(zip(
+            pca.components_[:3], pca.explained_variance_ratio_
+    ), start=1):
+        ax.plot(pc, 'o', label='PC {} ({:.0f}%)'.format(n, 100*var))
+
+    ax.axhline(
+        0,
+        color='.5', linewidth=plt.rcParams['ytick.major.width'],
+        zorder=-100
+    )
+
+    x = -.5
+    ticks = []
+    ticklabels = []
+
+    for obs, subobslist in emu.observables:
+        for subobs in subobslist:
+            i = model.data[system][obs][subobs]['Y'].shape[1]
+            ticks.append(x + .5*i)
+            ticklabels.append(obs_label(obs, subobs))
+            x += i
+
+    ax.set_xticks(ticks)
+    ax.set_xticklabels(ticklabels)
+    ax.tick_params(
+        'x',
+        bottom=False, labelbottom=False,
+        labeltop=True, pad=1
+    )
+    for t in ax.get_xticklabels():
+        t.set_verticalalignment('baseline')
+
+    ax.set_ylim(-.1, .3)
+    ax.set_ylabel('PCA coefficient', labelpad=1)
+    auto_ticks(ax, 'y', nbins=4, minor=2)
+    ax.legend(loc='upper left', handletextpad=0)
+
+    ax = axes[1]
+
+    npc = 10
+    ax.plot(
+        np.arange(1, 1 + npc),
+        pca.explained_variance_ratio_.cumsum()[:npc],
+        '-o',
+    )
+
+    ax.set_xlim(.5, npc + .5)
+    ax.set_ylim(0, 1)
+
+    majorticks = [1, 4, 7, 10]
+    ax.set_xticks(majorticks)
+    ax.set_xticks(sorted(set(range(1, npc)) - set(majorticks)), minor=True)
+    auto_ticks(ax, 'y', nbins=5, minor=2)
+    ax.xaxis.set_ticks_position('top')
+
+    ax.set_xlabel('Number of PC')
+    ax.set_ylabel('Cumulative explained variance fraction')
+    ax.xaxis.set_ticks_position('top')
+    ax.xaxis.set_label_position('top')
+
+    for ax in axes:
+        for s in ax.spines.values():
+            s.set_visible(True)
+
+    set_tight(w_pad=.5)
+
+@plot
 def trento_events():
     """
     Random trento events.
@@ -1555,24 +1666,6 @@ def validation_all(system='PbPb2760'):
         return_cov=True
     )
 
-    def label(obs, subobs):
-        if obs.startswith('d') and obs.endswith('_deta'):
-            return r'$d{}/d\eta$'.format(
-                {'Nch': r'N_\mathrm{ch}', 'ET': r'E_T'}[obs[1:-5]])
-
-        id_parts_labels = {'dN_dy': 'dN/dy', 'mean_pT': r'\langle p_T \rangle'}
-        if obs in id_parts_labels:
-            return '${}\ {}$'.format(
-                id_parts_labels[obs],
-                {'pion': '\pi', 'kaon': 'K', 'proton': 'p'}[subobs]
-            )
-
-        if obs == 'pT_fluct':
-            return r'$\delta p_T/\langle p_T \rangle$'
-
-        if obs == 'vnk':
-            return r'$v_{}\{{{}\}}$'.format(*subobs)
-
     for obs, subobslist in emu.observables:
         for subobs in subobslist:
             color = obs_color(obs, subobs)
@@ -1595,7 +1688,7 @@ def validation_all(system='PbPb2760'):
             )
 
             ticks.append(.5*(index + i))
-            ticklabels.append(label(obs, subobs))
+            ticklabels.append(obs_label(obs, subobs))
 
             index = i + 2
 
