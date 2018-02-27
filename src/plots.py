@@ -1867,56 +1867,100 @@ def diag_pca(system=default_system):
         axes[i][0].set_ylabel(label)
 
 
-@plot
-def diag_emu(system=default_system):
+def _diag_emu(system=default_system, pcs=None, params=None, label_all=True):
     """
     Diagnostic: plots of each principal component vs each input parameter,
     overlaid by emulator predictions at several points in design space.
 
     """
     gps = emulators[system].gps
-    nrows = len(gps)
-    ncols = gps[0].X_train_.shape[1]
-
-    w = 1.8
-    fig, axes = plt.subplots(
-        nrows=nrows, ncols=ncols,
-        figsize=(ncols*w, .8*nrows*w)
+    pcs = (
+        range(len(gps)) if pcs is None else
+        [p if p >= 0 else (len(gps) + p) for p in pcs]
     )
-
-    ymax = np.ceil(max(np.fabs(g.y_train_).max() for g in gps))
-    ylim = (-ymax, ymax)
+    nrows = len(pcs)
 
     design = Design(system)
+    if params is None:
+        params = design.keys
+    ncols = len(params)
 
-    for ny, (gp, row) in enumerate(zip(gps, axes)):
+    fig, axes = plt.subplots(
+        nrows=nrows, ncols=ncols,
+        figsize=figsize((.5 if label_all else .375)*ncols, .62*nrows/ncols),
+        sharex=(False if label_all else 'col'),
+        sharey=(False if label_all else 'row')
+    )
+
+    ymax = np.ceil(2*max(np.fabs(gps[pc].y_train_).max() for pc in pcs))/2
+    ylim = (-ymax, ymax)
+
+    tmax = int(ymax)
+    yticksmajor = [-tmax, 0, tmax]
+    yticksminor = list(range(-tmax + 1, 0)) + list(range(1, tmax))
+
+    for pc, row in zip(pcs, axes):
+        gp = gps[pc]
         y = gp.y_train_
 
-        for nx, (x, label, xlim, ax) in enumerate(zip(
-                gp.X_train_.T, design.labels, design.range, row
-        )):
-            ax.plot(x, y, 'o', ms=.8, color='.75', zorder=10)
+        for param, ax in zip(params, row):
+            i = design.keys.index(param)
+            x = gp.X_train_[:, i]
+            ax.plot(
+                x, y, 'o',
+                markersize=.4*plt.rcParams['lines.markersize'],
+                color='.7',
+                zorder=-30
+            )
 
+            xlim = design.range[i]
             x = np.linspace(xlim[0], xlim[1], 100)
-            X = np.empty((x.size, ncols))
+            X = np.empty((x.size, gp.X_train_.shape[1]))
 
-            for k, r in enumerate([.2, .5, .8]):
+            for r, c in [(.2, 'purple'), (.5, 'blue'), (.8, 'green')]:
                 X[:] = r*design.min + (1 - r)*design.max
-                X[:, nx] = x
+                X[:, i] = x
                 mean, std = gp.predict(X, return_std=True)
 
-                color = plt.cm.tab10(k)
-                ax.plot(x, mean, lw=.2, color=color, zorder=30)
+                color = colors[c]
+                ax.plot(
+                    x, mean,
+                    linewidth=.8*plt.rcParams['lines.linewidth'],
+                    color=color,
+                    zorder=-10
+                )
                 ax.fill_between(
                     x, mean - std, mean + std,
-                    lw=0, color=color, alpha=.3, zorder=20
+                    lw=0, color=color, alpha=.3, zorder=-20
                 )
 
             ax.set_xlim(xlim)
             ax.set_ylim(ylim)
 
-            ax.set_xlabel(label)
-            ax.set_ylabel('PC {}'.format(ny))
+            auto_ticks(ax, 'x', nbins=3, minor=2)
+            ax.set_yticks(yticksmajor)
+            ax.set_yticks(yticksminor, minor=True)
+
+            if label_all or ax.is_last_row():
+                ax.set_xlabel(design.labels[i])
+            if label_all or ax.is_first_col():
+                ax.set_ylabel('PC {}'.format(pc + 1))
+
+    set_tight(fig, w_pad=.5, h_pad=.25)
+
+
+@plot
+def diag_emu_all():
+    _diag_emu()
+
+
+@plot
+def diag_emu_partial():
+    _diag_emu(
+        pcs=[0, 2, -1],
+        params=['trento_p', 'tau_fs', 'etas_min'],
+        label_all=False
+    )
 
 
 if __name__ == '__main__':
