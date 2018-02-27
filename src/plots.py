@@ -1834,6 +1834,76 @@ def validation_example(
     )
 
 
+@plot
+def correlation_matrices(system='PbPb2760'):
+    """
+    Correlation (normalized covariance) matrices for model and experiment.
+
+    """
+    chain = mcmc.Chain()
+
+    emu = emulators[system]
+    emu_slices = [
+        (obs, subobs, slc)
+        for obs, subobs_slc in emu._slices.items()
+        for subobs, slc in subobs_slc.items()
+    ]
+
+    design = Design(system)
+    X = np.random.uniform(design.min, design.max).reshape(1, -1)
+    emu_cov = emu.predict(X, return_cov=True)[1].array[0]
+
+    fig, axes = plt.subplots(
+        ncols=3, figsize=figsize(1.7, .47),
+        gridspec_kw=dict(width_ratios=[1, 1, .02])
+    )
+
+    for (cov, slices, title), ax in zip([
+            (emu_cov, emu_slices, 'Model (emulator)'),
+            (chain._expt_cov[system], chain._slices[system], 'Experiment'),
+    ], axes):
+        s = np.sqrt(cov.diagonal())
+        img = ax.imshow(
+            cov / np.outer(s, s), vmin=-1, vmax=1,
+            interpolation='nearest', cmap='RdBu'
+        )
+
+        ticks = []
+        ticklabels = []
+
+        for obs, subobs, slc in slices:
+            ticks.append(.5*(slc.start + slc.stop - 1))
+            ticklabels.append(obs_label(obs, subobs))
+
+        ax.set_xticks(ticks)
+        ax.set_yticks(ticks)
+        ax.set_xticklabels(ticklabels)
+        ax.set_yticklabels(ticklabels)
+        ax.set_title(title, y=1.05)
+
+        ax.tick_params(
+            bottom=False, top=False, left=False, right=False,
+            labelbottom=False, labeltop=True,
+            pad=0
+        )
+
+        for s in ax.spines.values():
+            s.set_visible(False)
+
+    axes[0].tick_params(labelleft=False)
+    for t in axes[1].get_yticklabels():
+        t.set_horizontalalignment('center')
+        t.set_x(-.05)
+
+    cax = axes[-1]
+    fig.colorbar(img, cax=cax, ticks=[-1, -.5, 0, .5, 1])
+    cax.set_aspect(40)
+    cax.yaxis.set_ticks_position('left')
+    cax.set_title('Correlation', y=1.02, fontsize=fontsize['normal'])
+
+    set_tight(fig, rect=(0, 0, 1, .96))
+
+
 default_system = 'PbPb2760'
 
 
