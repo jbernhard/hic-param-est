@@ -214,8 +214,8 @@ def darken(rgb, amount=.5):
     Darken a color by the given amount in HSLuv space.
 
     """
-    h, s, l = hsluv.rgb_to_hsluv(rgb)
-    return hsluv.hsluv_to_rgb((h, s, (1 - amount)*l))
+    H, S, L = hsluv.rgb_to_hsluv(rgb)
+    return hsluv.hsluv_to_rgb((H, S, (1 - amount)*L))
 
 
 def obs_color_hsluv(obs, subobs):
@@ -1571,6 +1571,7 @@ def pca_vectors_variance(system='PbPb2760'):
             s.set_visible(True)
 
     set_tight(w_pad=.5)
+
 
 @plot
 def trento_events():
