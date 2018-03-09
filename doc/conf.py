@@ -41,7 +41,7 @@ extensions = [
 
 autodoc_member_order = 'bysource'
 
-github_url = 'https://github.com/jbernhard/hic-param-est-2017/blob/master/'
+github_url = 'https://github.com/jbernhard/hic-param-est/blob/master/'
 
 extlinks = {
     'ghlink': (github_url + '%s', '')

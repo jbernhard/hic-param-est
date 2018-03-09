@@ -25,7 +25,7 @@ Parameter estimation projects should build on previous work, adding and modifyin
 
 What is this document?
 ----------------------
-A brief guide to https://github.com/jbernhard/hic-param-est-2017, which is the code for my latest project applying Bayesian parameter estimation to quantify properties of the quark-gluon plasma.
+A brief guide to https://github.com/jbernhard/hic-param-est, which is the code for my latest project applying Bayesian parameter estimation to quantify properties of the quark-gluon plasma.
 
 I have made an effort to keep the code as generic possible so that it may be easily modified for similar projects.
 Users should `fork <https://help.github.com/articles/fork-a-repo/>`_ the repository and adapt it for their needs.
@@ -40,7 +40,7 @@ Most of the computation time in this analysis is occupied by linear algebra func
 
 Some Linux distributions (e.g. Arch Linux) provide the required Python packages with an optimized linear algebra library, in which case Miniconda is not necessary.
 
-The dependencies are listed in the repository's `requirements.txt <https://github.com/jbernhard/hic-param-est-2017/blob/master/requirements.txt>`_.
+The dependencies are listed in the repository's `requirements.txt <https://github.com/jbernhard/hic-param-est/blob/master/requirements.txt>`_.
 If you're using Miniconda, create and activate an environment with the dependencies::
 
    conda create -n hic-param-est numpy h5py scikit-learn pyyaml
@@ -53,7 +53,7 @@ Install a few additional dependencies that do not have conda packages::
 `emcee <http://dfm.io/emcee>`_ is used for MCMC sampling.
 `hic <http://qcd.phy.duke.edu/hic>`_ is my library for heavy-ion collision simulation analysis, used in this project for computing flow cumulants.
 
-Now, fork the `Github repository <https://github.com/jbernhard/hic-param-est-2017>`_ and clone your fork.
+Now, fork the `Github repository <https://github.com/jbernhard/hic-param-est>`_ and clone your fork.
 
 Usage
 -----
