@@ -600,6 +600,123 @@ def observables_map():
 
 
 @plot
+def observables_expt_only():
+    """
+    Observables plots of experimental data only.
+
+    """
+    plots = _observables_plots()
+
+    ylim = {
+        'Yields': (2, 1e5),
+        'Flow cumulants': (0, .15),
+        'Mean $p_T$': (0, 1.7),
+        'Mean $p_T$ fluctuations': (0, .045),
+    }
+
+    for n, p in enumerate(plots):
+        p['ylim'] = ylim[p['title']]
+        if p['title'] == 'Flow cumulants':
+            move_index = n
+            p.update(legend=True)
+
+    plots.insert(1, plots.pop(move_index))
+
+    ncols = int(len(plots)/2)
+
+    fig, axes = plt.subplots(
+        nrows=2, ncols=ncols,
+        figsize=figsize(1.1, aspect=1.5/ncols),
+        gridspec_kw=dict(
+            height_ratios=[p.get('height_ratio', 1) for p in plots[::ncols]]
+        )
+    )
+
+    for plot, ax in zip(plots, axes.flat):
+        labels = {}
+        handles = {}
+
+        for system, (obs, subobs, opts) in itertools.product(
+                systems, plot['subplots']
+        ):
+            try:
+                dset = expt.data[system][obs][subobs]
+            except KeyError:
+                continue
+
+            x = dset['x']
+            yexp = dset['y']
+            yerr = dset['yerr']
+            yerrstat = yerr.get('stat')
+            yerrsys = yerr.get('sys', yerr.get('sum'))
+
+            scale = opts.get('scale')
+            if scale is not None:
+                yexp = yexp*scale
+                if yerrstat is not None:
+                    yerrstat = yerrstat*scale
+                if yerrsys is not None:
+                    yerrsys = yerrsys*scale
+
+            color = obs_color(obs, subobs)
+            fill_markers = {'PbPb2760': True, 'PbPb5020': False}[system]
+
+            c = darken(color, .15)
+            h = ax.errorbar(
+                x, yexp, yerr=yerrstat, fmt='o',
+                capsize=0, color=c,
+                mec=c, mfc=(c if fill_markers else '.9'),
+                mew=((.2 if fill_markers else .6) *
+                     plt.rcParams['lines.linewidth']),
+                zorder=1000
+            )
+            if system not in handles:
+                handles[system] = h
+
+            ax.fill_between(
+                x, yexp - yerrsys, yexp + yerrsys,
+                facecolor='.9', zorder=-10,
+            )
+
+            if 'label' in opts and (obs, subobs) not in labels:
+                labels[obs, subobs] = ax.text(
+                    x[-1] + 3, yexp[-1],
+                    opts['label'],
+                    color=darken(color), ha='left', va='center'
+                )
+
+        if plot.get('yscale') == 'log':
+            ax.set_yscale('log')
+            ax.minorticks_off()
+        else:
+            auto_ticks(ax, 'y', nbins=4, minor=2)
+
+        ax.set_xlim(0, 80)
+        auto_ticks(ax, 'x', nbins=5, minor=2)
+
+        if ax.is_last_row():
+            ax.set_xlabel('Centrality %')
+
+        ax.set_ylim(plot['ylim'])
+        ax.set_ylabel(plot['ylabel'])
+
+        if plot.get('legend'):
+            ax.legend(
+                *zip(*[(handles[s], format_system(s)) for s in systems]),
+                loc='upper left', bbox_to_anchor=(0, .94),
+                handletextpad=0
+            )
+
+        ax.text(
+            .5, 1 if ax.is_first_row() else .97, plot['title'],
+            transform=ax.transAxes, ha='center', va='top',
+            size=plt.rcParams['axes.labelsize']
+        )
+
+    set_tight(fig)
+
+
+@plot
 def find_map():
     """
     Find the maximum a posteriori (MAP) point and compare emulator predictions
