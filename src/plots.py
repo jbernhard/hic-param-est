@@ -37,7 +37,6 @@ from scipy.interpolate import PchipInterpolator
 from sklearn.decomposition import PCA
 from sklearn.gaussian_process import GaussianProcessRegressor as GPR
 from sklearn.gaussian_process import kernels
-from sklearn.mixture import GaussianMixture
 
 from . import workdir, systems, parse_system, expt, model, mcmc
 from .design import Design
@@ -1076,243 +1075,110 @@ def posterior_p():
     set_tight(pad=0)
 
 
-@plot
-def region_shear_bulk(cmap=plt.cm.Blues):
+def _region(ax, name, cmap=plt.cm.Blues, legend=False, title=False):
     """
-    Visual estimates (posterior median and credible region) of the
-    temperature-dependent shear and bulk viscosity.
+    Visual estimate (posterior median and credible region) of
+    temperature-dependent shear or bulk viscosity.
 
     """
-    fig, axes = plt.subplots(ncols=2, figsize=figsize(1, .4))
+    var, keys, function, ymax = dict(
+        shear=(
+            'eta',
+            ['min', 'slope', 'crv'],
+            lambda T, m, s, c: m + s*(T - Tc)*(T/Tc)**c,
+            .4
+        ),
+        bulk=(
+            'zeta',
+            ['max', 'width', 't0'],
+            lambda T, m, w, T0: m / (1 + ((T - T0)/w)**2),
+            .08
+        ),
+    )[name]
 
     Tmin, Tmax = .150, .300
     Tc = .154
 
-    chain = mcmc.Chain()
+    samples = mcmc.Chain().load(*['{}s_{}'.format(var, k) for k in keys])
 
-    for (name,  var, keys, function, ymax), ax in zip([
-            ('shear', 'eta', ['min', 'slope', 'crv'],
-             lambda T, m, s, c: m + s*(T - Tc)*(T/Tc)**c,
-             .4),
-            ('bulk', 'zeta', ['max', 'width', 't0'],
-             lambda T, m, w, T0: m / (1 + ((T - T0)/w)**2),
-             .08)
-    ], axes):
-        samples = chain.load(*['{}s_{}'.format(var, k) for k in keys])
+    T = np.linspace(Tc if name == 'shear' else Tmin, Tmax, 1000)
+    ax.plot(
+        T, function(T, *np.median(samples, axis=0)),
+        color=cmap(.75), label='Posterior median'
+    )
 
-        T = np.linspace(Tc if name == 'shear' else Tmin, Tmax, 1000)
-        ax.plot(
-            T, function(T, *np.median(samples, axis=0)),
-            color=cmap(.75), label='Posterior median'
-        )
+    Tsparse = np.linspace(T[0], T[-1], 25)
+    intervals = [
+        PchipInterpolator(Tsparse, y)(T)
+        for y in np.array([
+            mcmc.credible_interval(function(t, *samples.T))
+            for t in Tsparse
+        ]).T
+    ]
+    ax.fill_between(
+        T, *intervals,
+        color=cmap(.3), label='90% credible region'
+    )
 
-        Tsparse = np.linspace(T[0], T[-1], 25)
-        intervals = [
-            PchipInterpolator(Tsparse, y)(T)
-            for y in np.array([
-                mcmc.credible_interval(function(t, *samples.T))
-                for t in Tsparse
-            ]).T
-        ]
-        ax.fill_between(
-            T, *intervals,
-            color=cmap(.3), label='90% credible region'
-        )
+    ax.set_xlim(Tmin, Tmax)
+    ax.set_ylim(0, ymax)
+    auto_ticks(ax, nbins=5)
+    ax.xaxis.set_major_formatter(
+        ticker.FuncFormatter(lambda x, pos: int(1000*x))
+    )
 
-        ax.set_xlim(Tmin, Tmax)
-        ax.set_ylim(0, ymax)
-        auto_ticks(ax, nbins=5)
-        ax.xaxis.set_major_formatter(
-            ticker.FuncFormatter(lambda x, pos: int(1000*x))
-        )
+    ax.set_xlabel('Temperature [MeV]')
+    ax.set_ylabel(r'$\{}/s$'.format(var))
 
-        ax.set_xlabel('Temperature [MeV]')
-        ax.set_ylabel(r'$\{}/s$'.format(var))
+    if title:
         ax.set_title(name.capitalize() + ' viscosity')
 
-        if name == 'shear':
-            ax.axhline(
-                1/(4*np.pi),
-                color='.5', linewidth=plt.rcParams['ytick.major.width']
-            )
-            ax.text(Tmax, .07, r'$1/4\pi$', va='top', ha='right', color='.3')
-            ax.legend(loc='upper left')
+    if legend:
+        ax.legend(loc=legend if isinstance(legend, str) else 'best')
 
-    set_tight(w_pad=.2)
-
-
-region_style = dict(color='.93', zorder=-100)
-Tc = .154
-
-
-def _region_shear(mode='full', scale=.6):
-    """
-    Estimate of the temperature dependence of shear viscosity eta/s.
-
-    """
-    plt.figure(figsize=(scale*textwidth, scale*aspect*textwidth))
-    ax = plt.axes()
-
-    def etas(T, m=0, s=0, c=0):
-        return m + s*(T - Tc)*(T/Tc)**c
-
-    chain = mcmc.Chain()
-
-    rangedict = dict(zip(chain.keys, chain.range))
-    ekeys = ['etas_' + k for k in ['min', 'slope', 'curv']]
-
-    T = np.linspace(Tc, .3, 100)
-
-    prior = ax.fill_between(
-        T, etas(T, *(rangedict[k][1] for k in ekeys)),
-        **region_style
-    )
-
-    ax.set_xlim(xmin=.15)
-    ax.set_ylim(0, .6)
-    ax.set_xticks(np.arange(150, 301, 50)/1000)
-    ax.xaxis.set_minor_locator(ticker.AutoMinorLocator(2))
-    auto_ticks(ax, 'y', minor=2)
-
-    ax.set_xlabel('Temperature [GeV]')
-    ax.set_ylabel(r'$\eta/s$')
-
-    if mode == 'empty':
-        return
-
-    if mode == 'examples':
-        for args in [
-                (.05, 1.0, -1),
-                (.10, 1.7, 0),
-                (.15, 2.0, 1),
-        ]:
-            ax.plot(T, etas(T, *args), color=plt.cm.Blues(.7))
-        return
-
-    eparams = chain.load(*ekeys).T
-    intervals = np.array([
-        mcmc.credible_interval(etas(t, *eparams))
-        for t in T
-    ]).T
-
-    band = ax.fill_between(T, *intervals, color=plt.cm.Blues(.32))
-
-    ax.plot(T, np.full_like(T, 1/(4*np.pi)), color='.6')
-    ax.text(.299, .07, r'KSS bound $1/4\pi$', va='top', ha='right', color='.4')
-
-    median, = ax.plot(
-        T, etas(T, *map(np.median, eparams)),
-        color=plt.cm.Blues(.77)
-    )
-
-    ax.legend(*zip(*[
-        (prior, 'Prior range'),
-        (median, 'Posterior median'),
-        (band, '90% credible region'),
-    ]), loc='upper left', bbox_to_anchor=(0, 1.03))
+    if name == 'shear':
+        ax.axhline(
+            1/(4*np.pi),
+            color='.5', linewidth=plt.rcParams['ytick.major.width']
+        )
+        ax.text(Tmax, .07, r'$1/4\pi$', va='top', ha='right', color='.3')
 
 
 @plot
 def region_shear():
-    _region_shear()
-
-
-@plot
-def region_shear_empty():
-    _region_shear('empty')
-
-
-@plot
-def region_shear_examples():
-    _region_shear('examples', scale=.5)
-
-
-def _region_bulk(mode='full', scale=.6):
     """
-    Estimate of the temperature dependence of bulk viscosity zeta/s.
+    Region plot for eta/s.
 
     """
-    plt.figure(figsize=(scale*textwidth, scale*aspect*textwidth))
-    ax = plt.axes()
-
-    def zetas(T, zetas_max=0, zetas_width=1):
-        return zetas_max / (1 + ((T - Tc)/zetas_width)**2)
-
-    chain = mcmc.Chain()
-
-    keys, ranges = map(list, zip(*(
-        i for i in zip(chain.keys, chain.range)
-        if i[0].startswith('zetas')
-    )))
-
-    T = Tc*np.linspace(.5, 1.5, 1000)
-
-    maxdict = {k: r[1] for k, r in zip(keys, ranges)}
-    ax.fill_between(
-        T, zetas(T, **maxdict),
-        label='Prior range',
-        **region_style
-    )
-
-    ax.set_xlim(T[0], T[-1])
-    ax.set_ylim(0, 1.05*maxdict['zetas_max'])
-    auto_ticks(ax, minor=2)
-
-    ax.set_xlabel('Temperature [GeV]')
-    ax.set_ylabel(r'$\zeta/s$')
-
-    if mode == 'empty':
-        return
-
-    if mode == 'examples':
-        for args in [
-                (.025, .01),
-                (.050, .03),
-                (.075, .05),
-        ]:
-            ax.plot(T, zetas(T, *args), color=plt.cm.Blues(.7))
-        return
-
-    # use a Gaussian mixture model to classify zeta/s parameters
-    samples = chain.load(*keys, thin=10)
-    gmm = GaussianMixture(n_components=3, covariance_type='full').fit(samples)
-    labels = gmm.predict(samples)
-
-    for n in range(gmm.n_components):
-        params = dict(zip(
-            keys,
-            (mcmc.credible_interval(s)[1] for s in samples[labels == n].T)
-        ))
-
-        if params['zetas_max'] > .05:
-            cmap = 'Blues'
-        elif params['zetas_width'] > .03:
-            cmap = 'Greens'
-        else:
-            cmap = 'Oranges'
-
-        curve = zetas(T, **params)
-        color = getattr(plt.cm, cmap)(.65)
-
-        ax.plot(T, curve, color=color, zorder=-10)
-        ax.fill_between(T, curve, color=color, alpha=.1, zorder=-20)
-
-    ax.legend(loc='upper left')
+    fig, ax = plt.subplots(figsize=figsize(.65))
+    _region(ax, 'shear', legend='upper left')
 
 
 @plot
 def region_bulk():
-    _region_bulk()
+    """
+    Region plot for zeta/s.
+
+    """
+    fig, ax = plt.subplots(figsize=figsize(.65))
+    _region(ax, 'bulk', legend='upper right')
 
 
 @plot
-def region_bulk_empty():
-    _region_bulk('empty')
+def region_shear_bulk(cmap=plt.cm.Blues):
+    """
+    Region plot for both eta/s and zeta/s.
 
+    """
+    fig, axes = plt.subplots(ncols=2, figsize=figsize(1, .4))
 
-@plot
-def region_bulk_examples():
-    _region_bulk('examples', scale=.5)
+    for (name, legend), ax in zip(
+            [('shear', 'upper left'), ('bulk', False)],
+            axes
+    ):
+        _region(ax, name, legend=legend, title=True)
+
+    set_tight(w_pad=.2)
 
 
 @plot
